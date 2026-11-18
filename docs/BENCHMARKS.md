@@ -122,3 +122,56 @@ the improver never receives verifier output. Missing verifier results remain
 unscored. Runs live under `runs/wb/<subset>/`.
 
 For Codex, start the bridge with `harness2-bridge --host 0.0.0.0` so that the containers can reach it.
+
+## lingee-bench (lb)
+
+Upstream: [kingdee/lingee-bench](https://github.com/kingdee/lingee-bench).
+Data: [KD-Lingee/lingee-bench](https://huggingface.co/datasets/KD-Lingee/lingee-bench).
+General and enterprise subsets. Needs Docker.
+
+```bash
+docker info
+harness2-setup lb --subset general
+harness2-check --bench lb --subset general
+harness2 --bench lb --subset general --k 1 --mode parallel
+harness2-judge --bench lb --subset general --k 1 --mode parallel
+harness2-report --bench lb --subset general --k 1 --mode parallel
+```
+
+Sequential recursion runs the same commands with `--mode sequential`.
+
+`harness2-setup lb` without `--subset` installs both subsets in one run; pass
+`--subset` to install only the one you intend to run. Every other command takes one
+subset at a time. Only the OpenCode substrate is supported: the lingee-bench runner
+ships OpenCode, Claude Code, Pi and DeepSeek harnesses, and only the OpenCode one takes
+an editable harness tree.
+
+Setup clones the pinned runner, copies the harness-adapter overlay into
+`src/lg_bench/agents/harness.py`, syncs its lockfile, downloads the requested
+subsets from Hugging Face (recording the resolved revision), verifies them with the
+runner's own `scripts/check_release.py`, and builds the model proxy and OpenCode
+harness images. The enterprise subset additionally builds the offline ERP mock and
+MCP proxy images, whose instance data comes from the download. The model routes come
+from `.env`: `HARNESS2_SOLVER_MODEL` keeps OpenCode's `provider/model` syntax for the
+proposer/selector channels, while the executor's model proxy admits the bare model
+name; set `HARNESS2_LB_ENV_FILE` to the runner's own env file (LG_OPENAI_*,
+LG_ANTHROPIC_*) for the proxy sidecar credentials.
+
+Tasks are discovered from `task.toml` and `instruction.md` under
+`dependencies/lingee-bench/datasets/lg-bench-<subset>-v1.0/tasks/`. Libraries use
+`metadata.domain` on the general subset (normalized to one slug per practice area;
+the enterprise subset derives it from the task-id prefix: finance, manufacturing,
+supply-chain). Each rollout is one Harbor job with a fresh benchmark container. The
+adapter reads the verifier's own `score.json` (general) or `results.json`
+(enterprise): `dual_channel` and `core_threshold_failed` are graded (the latter is a
+genuine zero for a missing core artifact), anything else — including a failed or
+unconfigured judge — stays unscored rather than becoming a zero, and the improver
+never receives verifier output. Runs live under `runs/lb/<subset>/`.
+
+The harness tree is bind-mounted into the container and installed by the overlay
+agent as OpenCode's global `AGENTS.md` plus its skills, scripts, plugins and
+subagents; an empty tree reproduces the stock agent. The dataset is public, so an
+executor with web access may retrieve the task packages; the general tasks declare
+`verifier.network_mode = "public"`, so block the dataset hosts during runs as
+described under [Web access](EXPERIMENTS.md#web-access) if that matters for your
+setup.

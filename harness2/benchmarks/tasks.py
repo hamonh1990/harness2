@@ -17,10 +17,41 @@
 from __future__ import annotations
 
 import json
+import re
 import tomllib
 from pathlib import Path
 
 from .. import config
+
+_LB_DOMAINS = frozenset(
+    {
+        "calendar-management",
+        "data-analysis",
+        "document-processing",
+        "financial-reasoning",
+        "image-processing",
+        "information-retrieval",
+        "knowledge-qa",
+        "sql-query",
+        "finance",
+        "manufacturing",
+        "supply-chain",
+    }
+)
+
+# The general suite labels some tasks in Chinese; one practice area gets one slug.
+_LB_DOMAIN_ALIASES = {
+    "信息检索": "information-retrieval",
+    "知识问答": "knowledge-qa",
+    "财务数值推理": "financial-reasoning",
+    "sql数据查询": "sql-query",
+    "supply_chain": "supply-chain",
+}
+
+_LB_ID_DOMAINS = frozenset({"finance", "manufacturing", "supply-chain"})
+_LB_ID_DOMAIN = re.compile(
+    r"^(?P<domain>" + "|".join(sorted(_LB_ID_DOMAINS, key=len, reverse=True)) + r")-"
+)
 
 
 def discover(bench: str, subset: str | None = None) -> dict[str, str]:
@@ -49,6 +80,15 @@ def discover(bench: str, subset: str | None = None) -> dict[str, str]:
             if not (p.parent / "instruction.md").is_file():
                 raise FileNotFoundError(f"Missing task instructions: {p.parent / 'instruction.md'}")
             tasks[p.parent.name] = domain.strip()
+    elif bench == "lb" and subset in ("general", "enterprise"):
+        root = config.lb_datasets() / f"lg-bench-{subset}-v1.0" / "tasks"
+        tasks = {}
+        for p in sorted(root.glob("*/task.toml")):
+            meta = tomllib.loads(p.read_text(encoding="utf-8")).get("metadata", {})
+            domain = lb_domain(p.parent.name, meta)
+            if not (p.parent / "instruction.md").is_file():
+                raise FileNotFoundError(f"Missing task instructions: {p.parent / 'instruction.md'}")
+            tasks[p.parent.name] = domain
     else:
         raise ValueError(f"Unknown benchmark/subset: {bench}/{subset}")
     if not tasks:
@@ -57,6 +97,33 @@ def discover(bench: str, subset: str | None = None) -> dict[str, str]:
             f"{bench}" + (f" --subset {subset}" if subset else "") + "."
         )
     return tasks
+
+
+def lb_domain(task_id: str, meta: dict) -> str:
+    """The lingee-bench grouping unit: metadata.domain, normalised to one slug per area.
+
+    The general suite ships domain labels in two languages and mixed case, and the
+    enterprise suite ships none at all, so both are folded onto the same small set of
+    practice areas. A label outside that set raises instead of silently becoming its own
+    domain, because a single-task library is not a domain.
+    """
+    raw = meta.get("domain")
+    if isinstance(raw, str) and raw.strip():
+        key = _LB_DOMAIN_ALIASES.get(raw.strip().lower(), raw.strip().lower())
+        slug = re.sub(r"[^a-z0-9]+", "-", key).strip("-")
+        if slug in _LB_DOMAINS:
+            return slug
+        raise ValueError(
+            f"lingee-bench task {task_id}: metadata.domain {raw!r} is not a known practice "
+            f"area {sorted(_LB_DOMAINS)}; add it to tasks._LB_DOMAIN_ALIASES"
+        )
+    m = _LB_ID_DOMAIN.match(task_id)
+    if m:
+        return m.group("domain")
+    raise ValueError(
+        f"lingee-bench task {task_id}: no metadata.domain and no labelled task-id prefix; "
+        f"expected one of {sorted(_LB_ID_DOMAINS)}"
+    )
 
 
 def select(tasks: dict[str, str], split: str, path: Path | None, *, benchmark: str) -> list[str]:

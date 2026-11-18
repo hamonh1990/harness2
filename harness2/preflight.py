@@ -55,7 +55,12 @@ def check(adapter, *, judge=False) -> list[str]:
             errors.append(str(exc))
 
     bench = adapter.spec.name.split("-", 1)[0]
-    name = {"jb": "job-bench-eval", "lab": "harvey-labs", "wb": "workbuddy-bench"}[bench]
+    name = {
+        "jb": "job-bench-eval",
+        "lab": "harvey-labs",
+        "wb": "workbuddy-bench",
+        "lb": "lingee-bench",
+    }[bench]
     repo = config.DEPENDENCIES / name
     for dependency in (name, "opencode"):
         target = config.DEPENDENCIES / dependency
@@ -68,11 +73,12 @@ def check(adapter, *, judge=False) -> list[str]:
                     errors.append(f"{dependency}: checkout differs from the supported pin")
             except subprocess.CalledProcessError:
                 errors.append(f"{dependency}: cannot read checkout revision")
-        patch = config.THIRD_PARTY / "patches" / PATCHES[dependency]
-        probe(
-            f"{dependency} patch",
-            ["git", "-C", target, "apply", "--reverse", "--check", patch],
-        )
+        if PATCHES[dependency]:
+            patch = config.THIRD_PARTY / "patches" / PATCHES[dependency]
+            probe(
+                f"{dependency} patch",
+                ["git", "-C", target, "apply", "--reverse", "--check", patch],
+            )
     if not (config.OPENCODE_DIR / "node_modules").is_dir():
         errors.append(f"OpenCode dependencies missing; run harness2-setup {bench}")
 
@@ -140,7 +146,14 @@ def check(adapter, *, judge=False) -> list[str]:
                 if json.loads(path.read_text())["model"]["name"] != "google/" + expected:
                     errors.append(f"WorkBuddy {role} configuration is stale; rerun setup")
             except (OSError, ValueError, KeyError, TypeError):
-                errors.append(f"WorkBuddy {role} configuration missing; rerun setup")
+                errors.append(f"WorkBuddy {role} configuration is missing; rerun setup")
+    elif bench == "lb":
+        probe("Docker daemon", ["docker", "info", "--format", "{{.ServerVersion}}"])
+        probe(
+            "lingee-bench Harbor runtime",
+            [repo / ".venv/bin/python", "-c", "import harbor"],
+            cwd=repo,
+        )
     return errors
 
 

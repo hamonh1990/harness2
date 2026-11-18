@@ -32,6 +32,9 @@ PATCHES = {
     "job-bench-eval": "job-bench-eval-judge.diff",
     "harvey-labs": "harvey-labs-judge-vertex-anthropic.diff",
     "workbuddy-bench": "workbuddy-bench-runtime.diff",
+    # lingee-bench needs no upstream patch; its harness injection rides along as an
+    # overlay agent copied in by `overlays`.
+    "lingee-bench": "",
 }
 
 RUNNERS = (
@@ -47,7 +50,9 @@ def missing_runners() -> str:
     A copy of the code without third-party material still runs the demo and tests, but
     setup needs these files to install a benchmark.
     """
-    need = [config.THIRD_PARTY / "patches" / name for name in PATCHES.values()]
+    need = [
+        config.THIRD_PARTY / "patches" / name for name in PATCHES.values() if name
+    ]
     need += [config.THIRD_PARTY / name for name in RUNNERS]
     absent = [path for path in need if not path.exists()]
     if not absent:
@@ -105,6 +110,8 @@ def clone(name: str, *, dry_run=False):
 
 def patch(name: str, *, dry_run=False):
     repo = config.DEPENDENCIES / name
+    if not PATCHES[name]:
+        return
     source = config.THIRD_PARTY / "patches" / PATCHES[name]
     if dry_run:
         run(["git", "-C", repo, "apply", "--check", source], dry_run=True)
@@ -137,6 +144,15 @@ def overlays(name: str, *, dry_run=False):
             (assets / "wb_runner" / "agents", repo / "src" / "workbuddy_bench" / "agents"),
             (assets / "wb_runner" / "configs" / "harnesses", repo / "configs" / "harnesses"),
         ]
+    if name == "lingee-bench":
+        # PROVENANCE.md: the runner overlay is a single file copied in as
+        # `harness.py` (the name lingee.py preflight and lg_bench expect).
+        source = assets / "lb_runner" / "agents" / "lb_harness_agent.py"
+        dest = repo / "src" / "lg_bench" / "agents" / "harness.py"
+        print(f"Copy runner assets: {source} -> {dest}", flush=True)
+        if not dry_run:
+            shutil.copyfile(source, dest)
+        return
     for source, dest in pairs:
         print(f"Copy runner assets: {source} -> {dest}", flush=True)
         if not dry_run:
@@ -317,3 +333,98 @@ open(sys.argv[1]+"/revision.json", "w").write(json.dumps({"revision": revision})
             dest.rmdir()
         staged.rename(dest)
         shutil.copy2(Path(tmp) / "revision.json", dest / ".harness2-download.json")
+
+
+def lingee_images(*, dry_run=False):
+    """Build the sidecar images the lingee-bench job YAMLs mount (model proxy, and the
+    offline ERP mock stack for the enterprise subset)."""
+    repo = config.lb_repo()
+    run(
+        [
+            "docker",
+            "build",
+            "-f",
+            "docker/model-proxy/Dockerfile",
+            "-t",
+            config.LB_PROXY_IMAGE,
+            ".",
+        ],
+        cwd=repo,
+        dry_run=dry_run,
+    )
+
+
+def lingee_datasets(subsets, *, dry_run=False):
+    """Install the lingee-bench task trees from its public Hugging Face dataset repo,
+    recording the resolved revision like the JobBench download does.
+
+    The dataset carries task digests in registry.json and dataset.toml;
+    scripts/check_release.py re-verifies the installed tree. The data is public, so an
+    executor with web access may retrieve it; see docs/BENCHMARKS.md.
+    """
+    repo = config.lb_repo()
+    datasets = config.lb_datasets()
+    wanted = list(subsets)
+    code = """from huggingface_hub import HfApi, snapshot_download
+import json, sys
+repo_id, revision, local_dir = sys.argv[1], sys.argv[2], sys.argv[3]
+if revision in ("", "main"):
+    revision = HfApi().dataset_info(repo_id).sha
+patterns = json.loads(sys.argv[4])
+snapshot_download(repo_id, repo_type="dataset", revision=revision,
+                  allow_patterns=patterns, local_dir=local_dir)
+open(local_dir + "/.harness2-revision.json", "w").write(
+    json.dumps({"repo": repo_id, "revision": revision}))
+"""
+    patterns = ["registry.json"]
+    for subset in wanted:
+        patterns += [f"lg-bench-{subset}-*/**"]
+    if "enterprise" in wanted:
+        patterns += ["environments/**"]
+    if dry_run:
+        print(
+            f"Download KD-Lingee/lingee-bench {patterns} from Hugging Face "
+            f"(revision {config.LB_DATASET_REVISION or 'resolved HEAD'}); "
+            "verify with scripts/check_release.py"
+        )
+        return
+    datasets.mkdir(parents=True, exist_ok=True)
+    run([repo / ".venv" / "bin" / "python", "-c", code, "KD-Lingee/lingee-bench",
+         config.LB_DATASET_REVISION, str(datasets), json.dumps(patterns)])
+    for subset in wanted:
+        if not list((datasets / f"lg-bench-{subset}-v1.0" / "tasks").glob("*/task.toml")):
+            raise RuntimeError(
+                f"KD-Lingee/lingee-bench download contained no {subset} tasks; "
+                "check the dataset repository"
+            )
+    run([repo / ".venv" / "bin" / "python", "scripts/check_release.py", "--datasets"],
+        cwd=repo)
+    if "enterprise" in wanted:
+        # erp-mock bakes the downloaded benchmark instance into its image, so it builds
+        # only after the data exists.
+        run(
+            [
+                "docker",
+                "build",
+                "-f",
+                "docker/erp-mock-mcp/Dockerfile",
+                "-t",
+                config.LB_ERP_MOCK_IMAGE,
+                ".",
+            ],
+            cwd=repo,
+            dry_run=False,
+        )
+        run(
+            [
+                "docker",
+                "build",
+                "-f",
+                "docker/mcp-proxy/Dockerfile",
+                "-t",
+                "lg-bench/mcp-proxy:0.1.0",
+                ".",
+            ],
+            cwd=repo,
+            dry_run=False,
+        )

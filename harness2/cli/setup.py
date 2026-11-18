@@ -21,33 +21,39 @@ import shutil
 import subprocess
 
 from harness2 import config, install
+from harness2.cli._common import LB_SUBSETS, SUBSET_CHOICES
 
 
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("benchmark", choices=("jb", "lab", "wb"))
+    p.add_argument("benchmark", choices=("jb", "lab", "wb", "lb"))
     p.add_argument(
         "--subset",
-        choices=("office", "web", "code"),
+        choices=SUBSET_CHOICES,
         default=None,
-        help="wb only: one subset to install; omitted installs office, web, and code",
+        help="wb/lb: one subset to install; omitted installs every subset of the benchmark",
     )
     p.add_argument("--substrate", choices=("oc", "cx"), default="oc")
     p.add_argument("--dry-run", action="store_true")
     args = p.parse_args(argv)
-    if args.subset and args.benchmark != "wb":
-        p.error("--subset only applies to wb")
+    if args.subset and args.benchmark not in ("wb", "lb"):
+        p.error("--subset only applies to wb or lb")
     dry = args.dry_run
     missing = install.missing_runners()
     if missing and not dry:
         p.exit(1, f"setup failed: {missing}\n")
     if missing:
         print(f"Note: {missing}")
-    name = {"jb": "job-bench-eval", "lab": "harvey-labs", "wb": "workbuddy-bench"}[args.benchmark]
+    name = {
+        "jb": "job-bench-eval",
+        "lab": "harvey-labs",
+        "wb": "workbuddy-bench",
+        "lb": "lingee-bench",
+    }[args.benchmark]
     try:
         if not dry:
             for binary in ("git", "uv", "npm") + (
-                ("docker", "curl") if args.benchmark == "wb" else ()
+                ("docker", "curl") if args.benchmark in ("wb", "lb") else ()
             ):
                 if not shutil.which(binary):
                     raise RuntimeError(f"Missing {binary}; see README.md")
@@ -84,7 +90,7 @@ def main(argv=None):
                 ],
                 dry_run=dry,
             )
-        else:
+        elif args.benchmark == "wb":
             install.workbuddy_models(dry_run=dry)
             subsets = [args.subset] if args.subset else ["office", "web", "code"]
             install.run(
@@ -101,6 +107,16 @@ def main(argv=None):
                         "--harness",
                         "opencode/1.14.18",
                     ],
+                        cwd=repo,
+                        dry_run=dry,
+                    )
+        else:
+            install.lingee_images(dry_run=dry)
+            subsets = [args.subset] if args.subset else list(LB_SUBSETS)
+            install.lingee_datasets(subsets, dry_run=dry)
+            if args.substrate == "oc":
+                install.run(
+                    ["uv", "run", "--no-sync", "lg-bench", "harness", "build", "opencode"],
                     cwd=repo,
                     dry_run=dry,
                 )

@@ -10,6 +10,7 @@ checkout at another revision.
 | workbuddy-bench | `b516950be5b56eb3be406c2f76ee1c5111dcb57f` |
 | harvey-labs | `b58a28ae9fde5ee4b810e53b4fd0a1915325a35d` |
 | opencode | `23fb5e0516c99ac04a1aa46c193efda2e1b9bb24` |
+| lingee-bench | `1188010d1d3bbbd0627ef9e47126146c9c866b93` |
 
 ## Included patches
 
@@ -26,13 +27,16 @@ checkout at another revision.
   undefined constant in the upstream Anthropic route support.
 
 Patches are checked before applying and skipped if already applied. Derived runner
-files belong in `harness2/third_party/{jb,lab,wb}_runner/`, which this copy does not
-include; setup copies the LAB and WorkBuddy overlays into the upstream checkouts.
+files belong in `harness2/third_party/{jb,lab,wb,lb}_runner/`, which this copy does not
+include; setup copies the LAB, WorkBuddy and lingee-bench overlays into the upstream
+checkouts.
 
 The upstream dependency locks are used for Python installations. OpenCode uses
 Bun 1.3.11 and the patched lock. Codex uses the version in `config.CODEX_VERSION`.
 JobBench's Hugging Face revision is resolved once for a download and recorded in
-`dataset/main/.harness2-download.json`. WorkBuddy's dataset fetcher, as patched
+`dataset/main/.harness2-download.json`. lingee-bench's download records its revision in
+`datasets/.harness2-revision.json` and re-verifies the tree with the runner's own
+`scripts/check_release.py`. WorkBuddy's dataset fetcher, as patched
 by setup, verifies each archive against the dataset repository's `SHA256SUMS` and
 refuses one it cannot verify; see
 [the WorkBuddy guide](../docs/BENCHMARKS.md#workbuddy-bench). LAB task files are part of its pinned Git checkout.

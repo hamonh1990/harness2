@@ -27,8 +27,10 @@ from ..core import library as LIB
 from ..core import schedule as SCHED
 from ..core.spec import BenchmarkAdapter
 
-BENCHES = ("jb", "wb", "lab")
+BENCHES = ("jb", "wb", "lab", "lb")
 WB_SUBSETS = ("office", "web", "code")
+LB_SUBSETS = ("general", "enterprise")
+SUBSET_CHOICES = WB_SUBSETS + LB_SUBSETS
 SUBSTRATES = ("oc", "cx")
 
 MODES_DEFAULT = "parallel"
@@ -56,8 +58,14 @@ def make_adapter(
         from ..benchmarks.workbuddy import WbAdapter
 
         return WbAdapter(subset, substrate=substrate, split_file=split_file)
+    if bench == "lb":
+        if subset not in LB_SUBSETS:
+            raise ValueError(f"--bench lb needs --subset from {LB_SUBSETS}, got {subset!r}")
+        from ..benchmarks.lingee import LbAdapter
+
+        return LbAdapter(subset, substrate=substrate, split_file=split_file)
     if subset:
-        raise ValueError(f"--subset applies to --bench wb only, got {subset!r} for {bench}")
+        raise ValueError(f"--subset applies to --bench wb or lb only, got {subset!r} for {bench}")
     if bench == "jb":
         from ..benchmarks.jobbench import JobBenchAdapter
 
@@ -96,9 +104,12 @@ def summary_namespace(adapter: BenchmarkAdapter, k: int, *, seed: int | None, ta
 
 def add_cell_args(p: argparse._ActionsContainer) -> None:
     """The (benchmark, substrate) cell selectors; `p` may be a parser or an argument group."""
-    p.add_argument("--bench", required=True, choices=BENCHES, help="jb | wb | lab")
+    p.add_argument("--bench", required=True, choices=BENCHES, help="jb | wb | lab | lb")
     p.add_argument(
-        "--subset", default=None, choices=WB_SUBSETS, help="WB only: office | web | code"
+        "--subset",
+        default=None,
+        choices=SUBSET_CHOICES,
+        help="wb: office | web | code — lb: general | enterprise",
     )
     p.add_argument(
         "--substrate",

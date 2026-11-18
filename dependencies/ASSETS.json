@@ -45,5 +45,9 @@
   "third_party/wb_runner/configs/harnesses/opencode/_defaults.yaml": "0ff808c61e7d0a0f4709d86fe6ed0457cb47a1401e754a18500eaf162c03fe84",
   "third_party/wb_runner/configs/harnesses/opencode/docker/Dockerfile": "407a631ad135c6960bc319ade205efc37175999c349466b8d82e9a2aedff7266",
   "third_party/wb_runner/configs/harnesses/opencode/presets/settings/v1_14.json": "1cc19b36f9aa7a8b6a9bf84d63fed256b9e807ecc163c49c52add1c06e6bdc7b",
-  "third_party/wb_runner/configs/harnesses/opencode/versions/1.14.18.yaml": "54cb6265d12b74098aab5425425b13afba581ac4a2c0cef43ba8ce6d7c1c9767"
+  "third_party/wb_runner/configs/harnesses/opencode/versions/1.14.18.yaml": "54cb6265d12b74098aab5425425b13afba581ac4a2c0cef43ba8ce6d7c1c9767",
+  "third_party/lb_runner/LICENSE": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+  "third_party/lb_runner/PROVENANCE.md": "a0e02dd724dae2ecca207c48a9442bd70b51f0802b885b355eedef60762363d3",
+  "third_party/lb_runner/agents/lb_harness_agent.py": "99b73e6cb664e05bf8f6a062e56bb5f4376f22eb5228617eff4503ae176b6805",
+  "third_party/licenses/lingee-bench.LICENSE": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
 }

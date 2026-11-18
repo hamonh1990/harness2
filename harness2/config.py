@@ -107,12 +107,14 @@ DEPENDENCY_PINS = {
     "workbuddy-bench": "b516950be5b56eb3be406c2f76ee1c5111dcb57f",
     "harvey-labs": "b58a28ae9fde5ee4b810e53b4fd0a1915325a35d",
     "opencode": "23fb5e0516c99ac04a1aa46c193efda2e1b9bb24",
+    "lingee-bench": "1188010d1d3bbbd0627ef9e47126146c9c866b93",
 }
 DEPENDENCY_ORIGINS = {
     "job-bench-eval": "https://github.com/Job-Bench/job-bench-eval.git",
     "workbuddy-bench": "https://github.com/Tencent/workbuddy-bench.git",
     "harvey-labs": "https://github.com/harveyai/harvey-labs.git",
     "opencode": "https://github.com/anomalyco/opencode.git",
+    "lingee-bench": "https://github.com/kingdee/lingee-bench.git",
 }
 
 
@@ -126,6 +128,15 @@ def wb_repo() -> Path:
 
 def lab_repo() -> Path:
     return DEPENDENCIES / "harvey-labs"
+
+
+def lb_repo() -> Path:
+    return DEPENDENCIES / "lingee-bench"
+
+
+def lb_datasets() -> Path:
+    """The lingee-bench dataset root; the datasets download separately from Hugging Face."""
+    return Path(env("HARNESS2_LB_DATASETS", lb_repo() / "datasets")).expanduser()
 
 
 OPENCODE_DIR = DEPENDENCIES / "opencode"
@@ -171,6 +182,29 @@ WB_CX_HARNESS_VER = CODEX_VERSION
 WB_MAX_JOBS = {"oc": 1, "cx": 1}
 WB_MAX_TRIALS = {"oc": 2, "cx": 2}
 WB_MODEL_CONNECTION = "local_proxy"
+
+# lingee-bench runs one Harbor job per rollout through its own runner checkout, so the
+# solver id is the bare model name its model proxy admits and the judge is either a bare
+# model id (general) or LG_EVAL_JUDGE_MODEL (enterprise).
+LB_OPENCODE_VER = env("HARNESS2_LB_OPENCODE_VER", "1.19.0")
+LB_PROXY_IMAGE = env("HARNESS2_LB_PROXY_IMAGE", "lg-bench/model-proxy:0.1.0")
+LB_ERP_MOCK_IMAGE = env("HARNESS2_LB_ERP_MOCK_IMAGE", "lg-bench/erp-mock-mcp:0.1.0")
+LB_ENV_FILE = env("HARNESS2_LB_ENV_FILE", "")
+LB_DATASET_REVISION = env("HARNESS2_LB_DATASET_REVISION", "")
+LB_MAX_JOBS = 1
+LB_MAX_TRIALS = 2
+LB_CONTAINER_HARNESS = "/opt/lg-harness/lingee-harness"
+
+
+def lb_solver_model() -> str:
+    """The lingee-bench solver id: its proxy admits bare model names, not provider/model."""
+    return SOLVER_MODEL_OC.split("/", 1)[-1]
+
+
+def lb_judge_model() -> str:
+    """The bare judge id the lingee graders call; empty when no judge is configured."""
+    return JUDGE_MODEL.split("/", 1)[-1]
+
 
 DEFAULT_PROPOSER_CHANNEL = "opencode"
 PROPOSER_MODEL_BY_CHANNEL = {"opencode": IMPROVER_MODEL, "claude_cli": IMPROVER_MODEL}
